@@ -1,0 +1,33 @@
+{
+  "name": "joystiq-nft-cli",
+  "version": "0.0.1",
+  "description": "A CLI tool to create NFT collections on SUI and upload metadata to Arweave and Walrus",
+  "scripts": {
+    "start": "ts-node index.ts",
+    "build": "npx tsc"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@mysten/sui": "^1.35.0",
+    "@mysten/walrus": "^0.2.3",
+    "@noble/hashes": "^1.8.0",
+    "@supercharge/promise-pool": "^3.2.0",
+    "axios": "^1.10.0",
+    "bignumber.js": "^9.3.0",
+    "chalk": "^4.1.2",
+    "commander": "^10.0.1",
+    "inquirer": "^12.7.0",
+    "merkletreejs": "^0.5.2",
+    "ora": "^5.0.0",
+    "arweave": "^1.13.7",
+    "arweave-stream-tx": "^1.2.2",
+    "slugify": "^1.6.6"
+  },
+  "devDependencies": {
+    "@types/inquirer": "^9.0.8",
+    "@types/node": "^24.0.10",
+    "typescript": "^5.8.3"
+  }
+}

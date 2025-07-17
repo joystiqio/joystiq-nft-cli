@@ -1,0 +1,42 @@
+{
+  "collection_name": "Test",
+  "collection_description": "description",
+  "collection_media_url": "https://arweave.net/weCcxywBM_SdQhfayJy5NMOr6Mm9Zq_kKb_FD95RbSY/1",
+  "supply": "8",
+  "fixed_metadata": false,
+  "royalty_percent": "5",
+  "royalty_wallet": "0xe8c90190303ae57c773ba12b83af5bb920f9d8364ba7c87b10132e6239e6895a",
+  "is_immutable": false,
+  "start_order": "1",
+  "groups": [
+    {
+      "name": "public",
+      "merkle_root": null,
+      "max_mints_per_wallet": "0",
+      "reserved_supply": "0",
+      "payments": [
+        {
+          "coin": "0x2::sui::SUI",
+          "routes": [
+            {
+              "method": "transfer",
+              "amount": "100001",
+              "destination": "0xe8c90190303ae57c773ba12b83af5bb920f9d8364ba7c87b10132e6239e6895a"
+            }
+          ]
+        }
+      ],
+      "start_time": "2025-07-09T06:03:42Z",
+      "end_time": null
+    },
+    {
+      "name": "free",
+      "merkle_root": null,
+      "max_mints_per_wallet": "0",
+      "reserved_supply": "0",
+      "payments": [],
+      "start_time": "2025-07-09T06:03:42Z",
+      "end_time": null
+    }
+  ]
+}

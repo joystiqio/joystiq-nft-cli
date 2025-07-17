@@ -1,0 +1,15 @@
+{
+    "name":"Lucky",
+    "image":"3.png",
+    "description":"Lucky is top",
+    "attributes":[
+        {
+            "trait_type":"lucky",
+            "value":"very"
+        },
+        {
+            "trait_type":"direction",
+            "value":"top"
+        }
+    ]
+}
