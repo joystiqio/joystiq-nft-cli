@@ -1,7 +1,7 @@
 import { Command } from "commander"
 import fs from "fs"
 import chalk from "chalk"
-import { getChainConfig, verifyTransaction } from "."
+import { getChainConfig, GetGasBudget, verifyTransaction } from "."
 import { Transaction } from "@mysten/sui/transactions"
 import inquirer from "inquirer"
 import ora from "ora"
@@ -112,7 +112,6 @@ export const command_collection_metadata = async (parent: Command) => {
 
                 const tx = new Transaction()
                 tx.setSender(keypair.getPublicKey().toSuiAddress())
-                tx.setGasBudget(100000000)
 
                 for (const item of batch) {
                     const keys = Object.keys(item.attributes || {})
@@ -134,6 +133,7 @@ export const command_collection_metadata = async (parent: Command) => {
                 }
 
                 try {
+                    tx.setGasBudget(await GetGasBudget(client, tx))
                     const res = await client.signAndExecuteTransaction({
                         transaction: tx,
                         signer: keypair,
@@ -156,7 +156,7 @@ export const command_collection_metadata = async (parent: Command) => {
                     } else {
                         throw new Error(res.effects?.status.error)
                     }
-                } catch (err:any) {
+                } catch (err: any) {
                     allLogs.push({
                         type: "error",
                         token_ids: batch.map((b) => b.token_id),

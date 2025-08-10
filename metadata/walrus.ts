@@ -1,91 +1,113 @@
 import { Command } from "commander"
-import { createArTx, createManifestTx, getArweaveNodeUrl, getArweaveWallet, manifestData, signArTx, submitArTx } from "./_arweave"
-import Arweave from "arweave"
+import inquirer from "inquirer"
 import fs from "fs"
 import chalk from "chalk"
-import inquirer from "inquirer"
-import ora from "ora"
+import { getChainConfig } from ".."
+import { WalrusClient } from "@mysten/walrus"
 import { BigNumber } from "bignumber.js"
 import { contentTypeOf } from "."
+import ora from "ora"
 
-export const command_metadata_arweave = async (parent: Command) => {
+export const command_metadata_walrus = async (parent: Command) => {
     parent
         .command("upload-single")
-        .description("Upload a single file to arweave")
-        .argument("<file>", "Path to the file to upload")
-        .option("-w --wallet <wallet>", "Path to Arweave keypair JSON file")
-        .option("-u --url <url>", "Arweave node URL (default: https://arweave.net)")
-        .option("-s --skip-confirm", "Skip confirmation for the transaction cost", false)
-        .action(async (file: string, options) => {
+        .description("Upload a single file to walrus")
+        .argument("<file>", "Path to the file.")
+        .argument("<epoch>", "Storage epoch to use.")
+        .option("-s --skip-confirm", "Skip confirmation for the upload.")
+        .option("-t --tip <tip>", "Max relay tip in WAL", "1000")
+        .option("-u --url <url>", "Base (Aggregator) URL for the image (default is walrus.space depending on the network)")
+        .option("-ur --upload-relay <url>", "Upload relay URL (default is walrus.space depending on the network)")
+        .action(async (filePath: string, epoch: string, options: { skipConfirm: boolean, tip: string, url?: string, uploadRelay?: string }) => {
 
-            if (!fs.existsSync(file)) {
-                return console.log(chalk.red("File not found: " + file))
-            }
+            let { rpc, client, keypair, wal, network } = getChainConfig(true)
 
-            let wallet = getArweaveWallet(options.wallet)
-            let { host, port, protocol } = getArweaveNodeUrl(options.url)
+            const baseUrl = options.url ? options.url.replace(/\/$/, "")
+                : (network === "mainnet" ? "https://aggregator.walrus-mainnet.walrus.space" : "https://aggregator.walrus-testnet.walrus.space")
+            const uploadRelayUrl = options.uploadRelay || (network === "mainnet" ? "https://upload-relay.walrus.space" : "https://upload-relay.testnet.walrus.space")
+            let tip = parseInt(options.tip)
 
-            let arweave = Arweave.init({
-                host,
-                port,
-                protocol,
+            client = client.$extend(
+                WalrusClient.experimental_asClientExtension({
+                    uploadRelay: {
+                        host: uploadRelayUrl,
+                        sendTip: {
+                            max: tip,
+                        },
+                    },
+                }),
+            );
+
+            const fileStats = fs.statSync(filePath);
+            const fileSize = fileStats.size;
+            const file = fs.readFileSync(filePath);
+            const epochNumber = parseInt(epoch);
+
+            const cost = await (client as any).walrus.storageCost(fileSize, epochNumber)
+
+            const balance = await client.getBalance({
+                owner: keypair.getPublicKey().toSuiAddress(),
+                coinType: wal,
             })
 
-            let fileStats = fs.statSync(file)
-            let size = fileStats.size
-
-            let cost = await arweave.transactions.getPrice(size)
-            let costInAr = arweave.ar.winstonToAr(cost)
+            let totalCost = new BigNumber(cost.totalCost);
+            let balanceValue = new BigNumber(balance.totalBalance).times(1e9);
 
             if (!options.skipConfirm) {
                 let confirm = await inquirer.prompt([
                     {
                         type: "confirm",
                         name: "confirm",
-                        message: "This will cost ~" + costInAr + " AR. Continue? (this is an estimate and may vary depending on the network and file size)",
-                        default: true
+                        message: `This will cost ${totalCost.div(1e9)} WAL. Do you want to continue?`
                     }
                 ])
 
                 if (!confirm.confirm)
-                    return
+                    return;
+
+                if (balanceValue.isLessThan(totalCost)) {
+                    console.log(chalk.red("Not enough balance to upload the file. Required: " + totalCost.div(1e9) + ", Available: " + balance.totalBalance + " WAL"))
+                    process.exit(1)
+                }
             }
 
-            //check balance
-            let address = await arweave.wallets.jwkToAddress(wallet)
-            let balance = await arweave.wallets.getBalance(address)
+            const contentType = contentTypeOf(filePath);
 
-            if (new BigNumber(balance).isLessThan(cost)) {
-                return console.log(chalk.red("Insufficient AR balance."))
-            }
+            const { blobId, blobObject } = await (client as any).walrus.writeBlob({
+                blob: file,
+                deletable: false,
+                epochs: epochNumber,
+                signer: keypair,
+                attributes: {
+                    contentType: contentType,
+                    contentLength: fileSize.toString(),
+                },
+            });
 
-            let spinner = ora("Uploading file").start()
-
-            // Create and sign the transaction
-            let fileBuffer = fs.readFileSync(file)
-            let tx = await createArTx(arweave, fileBuffer, wallet, contentTypeOf(file))
-            tx = await signArTx(arweave, tx, wallet)
-
-            await submitArTx(arweave, tx)
-
-            spinner.succeed("File uploaded successfully")
-            console.log("Transaction ID: " + chalk.blue(tx.id))
-            if (port === "443" || port === "80")
-                console.log("Url: " + chalk.green(`${protocol}://${host}/${tx.id}`))
-            else
-                console.log("Url: " + chalk.green(`${protocol}://${host}:${port}/${tx.id}`))
+            console.log("Blob ID:", blobId);
+            console.log("Blob Object:", blobObject);
+            console.log("URL:", `${baseUrl}/v1/blobs/by-object-id/${blobObject.id.id}`)
         })
 
     parent
         .command("upload")
-        .description("Upload project images to arweave")
+        .description("Upload project images to walrus")
         .argument("<project>", "Path to the project folder.")
-        .option("-w --wallet <wallet>", "Path to Arweave keypair JSON file")
-        .option("-u --url <url>", "Arweave node URL (default: https://arweave.net)")
+        .argument("<epoch>", "Storage epoch to use.")
         .option("-s --skip-confirm", "Skip confirmation for the transaction cost", false)
         .option("-m --max-retries <maxRetries>", "Maximum number of retries for uploading images", "3")
-        .action(async (projectPath: string, options) => {
-            let maxRetries = parseInt(options.maxRetries)
+        .option("-t --tip <tip>", "Max relay tip in WAL", "1000")
+        .option("-u --url <url>", "Base (Aggregator) URL for the images (default is walrus.space depending on the network)")
+        .option("-ur --upload-relay <url>", "Upload relay URL (default is walrus.space depending on the network)")
+        .action(async (projectPath: string, epoch: string, options) => {
+            let { rpc, client, keypair, network, wal } = getChainConfig(true)
+
+            const maxRetries = parseInt(options.maxRetries)
+            const tip = parseInt(options.tip)
+            const epochNumber = parseInt(epoch);
+            const baseUrl = options.url ? options.url.replace(/\/$/, "")
+                : (network === "mainnet" ? "https://aggregator.walrus-mainnet.walrus.space" : "https://aggregator.walrus-testnet.walrus.space");
+            const uploadRelayUrl = options.uploadRelay || (network === "mainnet" ? "https://upload-relay.walrus.space" : "https://upload-relay.testnet.walrus.space");
 
             if (fs.existsSync(`${projectPath}/metadata.json`)) {
                 let overwrite = await inquirer.prompt([
@@ -110,7 +132,7 @@ export const command_metadata_arweave = async (parent: Command) => {
                 return
             }
 
-            let filesParsed = []
+            let filesParsed: any[] = []
 
             for (let file of files) {
                 try {
@@ -127,7 +149,6 @@ export const command_metadata_arweave = async (parent: Command) => {
                     }
 
                     if (typeof metadata.token_id === "undefined") {
-                        //check if file name is number
                         let tokenId = file.split(".")[0]
                         if (isNaN(Number(tokenId))) {
                             spinner.fail("Token ID either must be defined in metadata file or file name must be a number: " + file)
@@ -144,18 +165,11 @@ export const command_metadata_arweave = async (parent: Command) => {
                         metadata.token_id = parseInt(metadata.token_id)
                     }
 
-                    if (metadata.token_id === -1) {
-                        filesParsed.push(metadata)
-                        continue; // Skip collection image
-                    }
-
-                    //validate name
-                    if (!metadata.name) {
+                    if (!metadata.name && metadata.token_id !== -1) {
                         spinner.fail("Name field must exist in metadata file " + file);
                         return;
                     }
 
-                    //validate attributes
                     if (metadata.attributes) {
                         if (!metadata.attributes) {
                             spinner.fail("Attributes field must exist in metadata file " + file);
@@ -186,7 +200,6 @@ export const command_metadata_arweave = async (parent: Command) => {
                 }
             }
 
-            //validate filesParsed token ids are sequential. 1,2,3,... no gaps
             let tokenIds = filesParsed.map(file => parseInt(file.token_id));
             tokenIds.sort((a, b) => a - b);
             tokenIds = tokenIds.filter(id => id !== -1);
@@ -202,83 +215,80 @@ export const command_metadata_arweave = async (parent: Command) => {
                 }
             }
 
-            //sort filesParsed by token_id
             filesParsed.sort((a, b) => parseInt(a.token_id) - parseInt(b.token_id));
 
             spinner.succeed("Files valid")
 
-            //Collection check
-            let tokenIdMinusOne = filesParsed.findIndex((file) => parseInt(file.token_id) === -1);
+            const tokenIdMinusOne = filesParsed.findIndex((file) => parseInt(file.token_id) === -1);
 
-            let wallet = getArweaveWallet(options.wallet)
-            let { host, port, protocol } = getArweaveNodeUrl(options.url)
+            client = client.$extend(
+                WalrusClient.experimental_asClientExtension({
+                    uploadRelay: {
+                        host: uploadRelayUrl,
+                        sendTip: {
+                            max: tip,
+                        },
+                    },
+                }),
+            );
 
-            let arweave = Arweave.init({
-                host,
-                port,
-                protocol,
-            })
-
-            //logs
             let logs: any = []
 
-            //setup cache
             let cache: any = {
                 images: [],
-                imagesManifest: "",
             }
 
-            if (!fs.existsSync(`${projectPath}/.arweave`)) {
-                fs.mkdirSync(`${projectPath}/.arweave`, { recursive: true })
+            if (!fs.existsSync(`${projectPath}/.walrus`)) {
+                fs.mkdirSync(`${projectPath}/.walrus`, { recursive: true })
             }
 
-            if (fs.existsSync(`${projectPath}/.arweave/cache.json`)) {
-                let cachefile = JSON.parse(fs.readFileSync(`${projectPath}/.arweave/cache.json`, "utf-8"))
+            if (fs.existsSync(`${projectPath}/.walrus/cache.json`)) {
+                let cachefile = JSON.parse(fs.readFileSync(`${projectPath}/.walrus/cache.json`, "utf-8"))
 
-                //ask if use cache
                 let useCache = await inquirer.prompt([
                     {
                         type: "confirm",
                         name: "useCache",
-                        message: `Would you like to use the cache file for previous content? located at ${chalk.green(`${projectPath}/.arweave/cache.json`)}`,
+                        message: `Would you like to use the cache file for previous content? located at ${chalk.green(`${projectPath}/.walrus/cache.json`)}`,
                         default: true
                     }
                 ])
 
                 if (useCache.useCache) {
                     cache = cachefile
-                    //check if cache is valid
-                    if (!Array.isArray(cache.images) || typeof cache.imagesManifest !== "string") {
+                    if (!Array.isArray(cache.images)) {
                         spinner.fail("Invalid cache file")
                         return
                     }
                 }
             }
 
-            //calculate cost
             let totalSize = 0
 
             for (let file of filesParsed) {
                 if (cache.images.filter((image: any) => image.name === file.image).length > 0) {
-                    continue //skip if image is already in cache
+                    continue
                 }
                 let imageFileSize = fs.statSync(`${projectPath}/assets/${file.image}`).size
                 totalSize += imageFileSize
             }
 
-            let cost = await arweave.transactions.getPrice(totalSize)
-            let constInAr = arweave.ar.winstonToAr(cost)
+            const cost = await (client as any).walrus.storageCost(totalSize, epochNumber)
 
-            //check balance
-            let address = await arweave.wallets.jwkToAddress(wallet)
-            let balance = await arweave.wallets.getBalance(address)
+            const balance = await client.getBalance({
+                owner: keypair.getPublicKey().toSuiAddress(),
+                coinType: wal,
+            })
+
+            let totalCost = new BigNumber(cost.totalCost);
+            let balanceValue = new BigNumber(balance.totalBalance).times(1e9);
 
             if (!options.skipConfirm && totalSize > 0) {
                 let confirm = await inquirer.prompt([
                     {
                         type: "confirm",
                         name: "confirm",
-                        message: "This will cost ~" + constInAr + " AR. Continue? (this is an estimate and may vary depending on the network and file size)",
+                        message: "This will cost ~" + totalCost.div(1e9) + " WAL. Continue? (this is an estimate and may vary depending on the network and file size)",
                         default: true
                     }
                 ])
@@ -286,44 +296,53 @@ export const command_metadata_arweave = async (parent: Command) => {
                 if (!confirm.confirm)
                     return
 
-                if (new BigNumber(balance).isLessThan(cost)) {
-                    spinner.fail("Not enough balance to upload the file. Required: " + constInAr + " AR, Available: " + arweave.ar.winstonToAr(balance) + " AR")
-                    return
+                if (balanceValue.isLessThan(totalCost)) {
+                    console.log(chalk.red("Not enough balance to upload the file. Required: " + totalCost.div(1e9) + ", Available: " + balance.totalBalance + " WAL"))
+                    process.exit(1)
                 }
             }
 
-            let failedImages = []
+            let failedImages: string[] = []
 
             spinner = ora("Uploading images").start()
             let counter = 0
 
-            //upload images
             for (let i = 0; i < filesParsed.length; i++) {
                 let retryCount = 0;
                 let metadata = filesParsed[i]
 
-                //if metadata.image is not in cache.images, upload it
-                if (cache.images.some((image: any) => image.name === metadata.image)) {
-                    counter++;
+                if (cache.images.filter((image: any) => image.name === metadata.image).length > 0) {
+                    counter++
                     spinner.text = "Uploading images (" + counter + "/" + filesParsed.length + ") - (failed: " + failedImages.length + ")"
-                    continue;
+                    continue
                 }
 
                 let image = fs.readFileSync(`${projectPath}/assets/${metadata.image}`)
+                let imageStats = fs.statSync(`${projectPath}/assets/${metadata.image}`);
+                let imageSize = imageStats.size;
 
                 while (retryCount < maxRetries) {
                     try {
-                        let tx = await createArTx(arweave, image, wallet, contentTypeOf(metadata.image))
-                        tx = await signArTx(arweave, tx, wallet)
+                        const contentType = contentTypeOf(`${projectPath}/assets/${metadata.image}`);
+                        const { blobId, blobObject } = await (client as any).walrus.writeBlob({
+                            blob: image,
+                            deletable: false,
+                            epochs: epochNumber,
+                            signer: keypair,
+                            attributes: {
+                                contentType: contentType,
+                                contentLength: imageSize.toString()
+                            },
+                        });
 
-                        await submitArTx(arweave, tx)
                         cache.images.push({
                             name: metadata.image,
                             token_id: metadata.token_id,
-                            txid: tx.id
+                            blobId: blobId,
+                            blobObject: blobObject.id.id,
                         })
 
-                        fs.writeFileSync(`${projectPath}/.arweave/cache.json`, JSON.stringify(cache, null, 4))
+                        fs.writeFileSync(`${projectPath}/.walrus/cache.json`, JSON.stringify(cache, null, 4))
 
                         counter++
                         spinner.text = "Uploading images (" + counter + "/" + filesParsed.length + ") - (failed: " + failedImages.length + ")"
@@ -338,7 +357,7 @@ export const command_metadata_arweave = async (parent: Command) => {
                             } else {
                                 failedImages.push(metadata.image);
                                 counter++;
-                                spinner.text = "Uploading images (" + counter + "/" + filesParsed.length + ") - (failed: " + failedImages.length + ")"
+                                spinner.text = "Uploading images (" + counter + "/" + filesParsed.length + ") - (failed: " + failedImages.length + ")";
 
                                 logs.push({
                                     type: "error",
@@ -350,7 +369,7 @@ export const command_metadata_arweave = async (parent: Command) => {
                         } catch (e) {
                             failedImages.push(metadata.image);
                             counter++;
-                            spinner.text = "Uploading images (" + counter + "/" + filesParsed.length + ") - (failed: " + failedImages.length + ")"
+                            spinner.text = "Uploading images (" + counter + "/" + filesParsed.length + ") - (failed: " + failedImages.length + ")";
 
                             logs.push({
                                 type: "error",
@@ -361,7 +380,6 @@ export const command_metadata_arweave = async (parent: Command) => {
                         }
                     }
 
-                    // If the retry count has reached the maximum, log the failure and stop the CLI
                     if (retryCount === maxRetries) {
                         logs.push({
                             type: "fatal",
@@ -369,11 +387,8 @@ export const command_metadata_arweave = async (parent: Command) => {
                             error: `Max retries reached: ${maxRetries}`
                         });
 
-                        // Save logs before exiting
-                        fs.writeFileSync(`${projectPath}/.arweave/logs.json`, JSON.stringify(logs, null, 4))
-
-                        //save cache  before exiting
-                        fs.writeFileSync(`${projectPath}/.arweave/cache.json`, JSON.stringify(cache, null, 4))
+                        fs.writeFileSync(`${projectPath}/.walrus/logs.json`, JSON.stringify(logs, null, 4))
+                        fs.writeFileSync(`${projectPath}/.walrus/cache.json`, JSON.stringify(cache, null, 4))
 
                         throw new Error(`Failed to upload image ${metadata.image} after ${maxRetries} retries. (429)`);
                     }
@@ -382,75 +397,24 @@ export const command_metadata_arweave = async (parent: Command) => {
 
             spinner.succeed("Uploading Images completed")
 
-            // Save cache
-            fs.writeFileSync(`${projectPath}/.arweave/cache.json`, JSON.stringify(cache, null, 4))
-
-            // Save logs
-            fs.writeFileSync(`${projectPath}/.arweave/logs.json`, JSON.stringify(logs, null, 4))
+            fs.writeFileSync(`${projectPath}/.walrus/cache.json`, JSON.stringify(cache, null, 4))
+            fs.writeFileSync(`${projectPath}/.walrus/logs.json`, JSON.stringify(logs, null, 4))
 
             if (failedImages.length > 0) {
                 console.log(chalk.red("Failed to upload " + failedImages.length + " images"))
-
                 console.log("re run upload command to upload failed images")
                 return
             }
 
-            spinner = ora("Creating images manifest").start()
-
-            let manifest: manifestData[] = []
-            for (let image of cache.images) {
-                manifest.push({
-                    txid: image.txid,
-                    path: image.token_id
-                })
-            }
-
-            try {
-                //if token id -1 exists or not
-                let index;
-                if (tokenIdMinusOne !== -1) {
-                    index = "-1"
-                } else {
-                    index = cache.images[0].token_id;
-                }
-
-                let manifestTx = await createManifestTx(arweave, manifest, wallet, index);
-                manifestTx = await signArTx(arweave, manifestTx, wallet)
-                await submitArTx(arweave, manifestTx)
-                cache.imagesManifest = manifestTx.id
-            } catch (e) {
-                spinner.fail("Failed to upload images manifest")
-                console.log("re run upload command to retry upload")
-
-                logs.push({
-                    type: "error",
-                    message: "Failed to upload image manifest",
-                    error: e
-                })
-
-                fs.writeFileSync(`${projectPath}/.arweave/logs.json`, JSON.stringify(logs, null, 4))
-                return
-            }
-
-            spinner.succeed("Uploading images manifest completed")
-
-            // Save cache
-            fs.writeFileSync(`${projectPath}/.arweave/cache.json`, JSON.stringify(cache, null, 4))
-
-            // Create metadata file
             spinner = ora("Creating metadata file").start()
 
             let metadataFile: any[] = []
-            let url = "";
-            if (port === "443" || port === "80") {
-                url = `${protocol}://${host}/${cache.imagesManifest}/`;
-            } else {
-                url = `${protocol}://${host}:${port}/${cache.imagesManifest}/`;
-            }
+
+            const lookup = new Map(cache.images.map((i: any) => [parseInt(i.token_id), i]))
 
             for (let file of filesParsed) {
                 if (file.token_id === -1) {
-                    continue; // Skip collection image
+                    continue;
                 }
 
                 let attributes: any = {}
@@ -459,12 +423,19 @@ export const command_metadata_arweave = async (parent: Command) => {
                     file.attributes.forEach((attr: any) => {
                         attributes[attr.trait_type] = attr.value;
                     });
+                } else if (file.attributes && typeof file.attributes === "object") {
+                    attributes = file.attributes
+                }
+
+                const cached:any = lookup.get(parseInt(file.token_id))
+                if (!cached) {
+                    continue
                 }
 
                 let metadata = {
                     token_id: file.token_id,
                     name: file.name,
-                    image_url: `${url}${file.token_id}`,
+                    image_url: `${baseUrl}/v1/blobs/by-object-id/${cached.blobObject}`,
                     description: file.description || "",
                     attributes: attributes,
                 }
@@ -476,12 +447,13 @@ export const command_metadata_arweave = async (parent: Command) => {
             fs.writeFileSync(`${projectPath}/metadata.json`, metadataFileContent)
 
             spinner.succeed("Metadata file created at " + chalk.green(`${projectPath}/metadata.json`))
-            console.log("Arweave manifest URL: " + chalk.green(url))
 
             if (tokenIdMinusOne !== -1) {
-                console.log("Used token id -1 as index for manifest. You can use it as collection image: " + chalk.green(`${url}-1`))
+                const minusOne = cache.images.find((i: any) => parseInt(i.token_id) === -1)
+                if (minusOne) {
+                    console.log("Collection image (token id -1): " + chalk.green(`${baseUrl}/v1/blobs/by-object-id/${minusOne.blobObject}`))
+                }
             }
-
-
         })
+
 }

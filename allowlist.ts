@@ -38,12 +38,12 @@ export const command_allowlist = async (root: Command) => {
             console.log(chalk.green(`Formatted ${wallets.length} wallets`))
 
             if (options.newFile) {
-                fs.writeFileSync(options.newFile+".json", JSON.stringify(wallets, null, 4))
+                fs.writeFileSync(options.newFile + ".json", JSON.stringify(wallets, null, 4))
                 console.log(chalk.green(`Saved to ${options.newFile}.json`))
-            }else if (options.overwrite) {
+            } else if (options.overwrite) {
                 fs.writeFileSync(file, JSON.stringify(wallets, null, 4))
                 console.log(chalk.green(`Saved to ${file}`))
-            }else{
+            } else {
 
                 let ask = await inquirer.prompt([
                     {
@@ -56,7 +56,7 @@ export const command_allowlist = async (root: Command) => {
                 if (ask.overwrite) {
                     fs.writeFileSync(file, JSON.stringify(wallets, null, 4))
                     console.log(chalk.green(`Saved to ${file}`))
-                }else{
+                } else {
                     let newFile = await inquirer.prompt([
                         {
                             type: "input",
@@ -64,8 +64,8 @@ export const command_allowlist = async (root: Command) => {
                             message: "Name of the new file to save the formatted wallets",
                         }
                     ])
-                    
-                    fs.writeFileSync(newFile.file+".json", JSON.stringify(wallets, null, 4))
+
+                    fs.writeFileSync(newFile.file + ".json", JSON.stringify(wallets, null, 4))
                     console.log(chalk.green(`Saved to ${newFile.file}.json`))
                 }
             }
@@ -76,15 +76,23 @@ export const command_allowlist = async (root: Command) => {
         });
 
     const _genMerkleRoot = async (wallets: string[]) => {
-        // Hash wallet addresses
-        let hashedWallets = wallets.map(keccak_256)
+        // leaf = keccak256(raw_address_bytes)
+        const leaves = wallets.map((addr) => {
+            const hex = addr.startsWith('0x') ? addr.slice(2) : addr;
+            const padded = hex.padStart(64, '0');
+            const bytes = Buffer.from(padded, 'hex');
+            return Buffer.from(keccak_256(bytes));
+        });
 
-        // Generate Merkle tree
-        const tree = new MerkleTree(hashedWallets, keccak_256, { sortPairs: true })
-        const merkleRoot = tree.getRoot().toString('hex')
+        const tree = new MerkleTree(
+            leaves,
+            (d: Buffer) => Buffer.from(keccak_256(d)),
+            { sortPairs: true }
+        );
 
-        console.log(`Merkle root: ${merkleRoot}`)
-    }
+        const merkleRootHex = tree.getRoot().toString('hex');
+        console.log(`Merkle root: ${merkleRootHex}`);
+    };
 
     root
         .command("merkle-root")

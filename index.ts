@@ -1,4 +1,3 @@
-//process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 import { program } from "commander"
 import { command_init } from "./init"
 import { getFullnodeUrl, SuiClient } from '@mysten/sui/client';
@@ -9,13 +8,13 @@ import { command_collection } from "./collection";
 import axios from "axios";
 import { command_utils } from "./utils";
 import { command_metadata } from "./metadata";
-
-import http from 'http';
-import https from 'https';
 import { command_allowlist } from "./allowlist";
+import { Transaction } from "@mysten/sui/transactions"
 
-const JOYSTIQ_CORE_TESTNET = "0xdee6a2701e148576c687d5b15f53e57dd7205128f7a7c54fd7f87383b40445f1"
-const JOYSTIQ_CORE_TESTNET_ROOT = "0xa53664b81324f5663f36a713389730e1435f51419e353c3bca96b6658656f74f"
+const JOYSTIQ_CORE_TESTNET = "0xf3470587bbf694ade7e2b30bc92d8cb988f871ec1034bfeaef35a0cf01d23d3f"
+const JOYSTIQ_CORE_TESTNET_ROOT = "0x0328d63fe460477e59e7499274c974d0719382884fcc2128ad1fbb3a7259f7e3"
+const JOYSTIQ_CORE_MAINNET = "0x7595ad0a79228628cf186c3ae70d0c94e78b8071a7dcaaab3e7104cd87b8af84"
+const JOYSTIQ_CORE_MAINNET_ROOT = "0x617b5bfab19d13a414c73f7ddaf711fa4d0bf39d6d252e8a56b62f447311c3d3"
 const WAL_TESTNET = "0x8190b041122eb492bf63cb464476bd68c6b7e570a4079645a8b28732b6197a82::wal::WAL"
 const WAL_MAINNET = "0x356a26eb9e012a68958082340d4c4116e7f55615cf27affcff209cf0ae544f59::wal::WAL"
 
@@ -54,6 +53,17 @@ export const getChainConfig = (pkMust: boolean = false) => {
         });
         rpc = config.rpc || getFullnodeUrl("testnet");
         wal = WAL_TESTNET;
+    } else if (config.network === "mainnet") {
+        joystiq = {
+            core: JOYSTIQ_CORE_MAINNET,
+            root: JOYSTIQ_CORE_MAINNET_ROOT,
+        };
+        client = new SuiClient({
+            url: config.rpc || getFullnodeUrl("mainnet"),
+            network: "mainnet",
+        });
+        rpc = config.rpc || getFullnodeUrl("mainnet");
+        wal = WAL_MAINNET;
     } else {
         console.log(chalk.red("Invalid network. available networks: mainnet, testnet"))
         process.exit(1)
@@ -88,7 +98,7 @@ export const verifyTransaction = async (rpc: string, digest: string) => {
 
             if (res.data.error) {
                 retries++;
-                await new Promise(resolve => setTimeout(resolve, 1000)); 
+                await new Promise(resolve => setTimeout(resolve, 1000));
                 continue;
             }
 
@@ -97,7 +107,7 @@ export const verifyTransaction = async (rpc: string, digest: string) => {
 
         } catch (error) {
             retries++;
-            await new Promise(resolve => setTimeout(resolve, 1000)); 
+            await new Promise(resolve => setTimeout(resolve, 1000));
         }
     }
     throw new Error(`Transaction with digest ${digest} not found after ${maxRetries} retries.`);
@@ -130,7 +140,7 @@ export const getTransactionResult = async (rpc: string, digest: string) => {
 
             if (res.data.error) {
                 retries++;
-                await new Promise(resolve => setTimeout(resolve, 1000)); 
+                await new Promise(resolve => setTimeout(resolve, 1000));
                 continue;
             }
 
@@ -138,18 +148,31 @@ export const getTransactionResult = async (rpc: string, digest: string) => {
 
         } catch (error) {
             retries++;
-            await new Promise(resolve => setTimeout(resolve, 1000)); 
-            
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
         }
     }
 
     throw new Error(`Transaction with digest ${digest} not found after ${maxRetries} retries.`);
 }
 
+export const GetGasBudget = async (client: SuiClient, tx: Transaction) => {
+    const dryRunBytes = await tx.build({ client });
+    const dryRunResult = await client.dryRunTransactionBlock({ transactionBlock: dryRunBytes });
+    const gasUsed = dryRunResult.effects.gasUsed!;
+    const estimatedGas = (
+        BigInt(gasUsed.computationCost) +
+        BigInt(gasUsed.storageCost) -
+        BigInt(gasUsed.storageRebate)
+    );
+    return Number(estimatedGas * BigInt(12) / BigInt(10));
+}
+
 const main = () => {
     program
         .name("joystiq")
-        .description(``);
+        .version("0.1.0")
+        .description(`SUI NFT CLI`);
 
     const init = program.command("init").description("Initialization commands")
     const collection = program.command("collection").description("Collection commands")

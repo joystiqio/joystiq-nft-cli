@@ -1,7 +1,7 @@
 import { Command } from "commander"
 import fs from "fs"
 import chalk from "chalk"
-import { getChainConfig } from "."
+import { getChainConfig, GetGasBudget } from "."
 import { Transaction } from "@mysten/sui/transactions"
 
 export const command_utils = async (parent: Command) => {
@@ -14,6 +14,7 @@ export const command_utils = async (parent: Command) => {
         .action(async (projectPath, groupName, amount) => {
             let { rpc, keypair, client, joystiq } = getChainConfig(true)
 
+            //client.getDynamicFields
 
             let artifacts = JSON.parse(fs.readFileSync(`${projectPath}/artifacts.json`).toString())
             let config = JSON.parse(fs.readFileSync(`${projectPath}/config.json`).toString())
@@ -31,10 +32,10 @@ export const command_utils = async (parent: Command) => {
 
             let tx = new Transaction()
             tx.setSender(keypair.getPublicKey().toSuiAddress())
-            tx.setGasBudget(50000000)
 
             tx.moveCall({
                 target: `${artifacts.packageID}::jq721::mint_unpaid`,
+                typeArguments: [/*'0x2::sui::SUI'*/],
                 arguments: [
                     tx.object(artifacts.collectionObjectID),
                     tx.object(artifacts.collectionJqCoreConfigID),
@@ -46,6 +47,7 @@ export const command_utils = async (parent: Command) => {
                 ]
             })
 
+            tx.setGasBudget(await GetGasBudget(client, tx))
             let res = await client.signAndExecuteTransaction({
                 transaction: tx,
                 signer: keypair,
@@ -63,6 +65,4 @@ export const command_utils = async (parent: Command) => {
 
 
         })
-
-   
 }

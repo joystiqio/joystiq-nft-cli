@@ -1,13 +1,25 @@
 # Joystiq CLI
 
 Joystiq is a **permissionless NFT launch tool** for the Sui blockchain.  
-This CLI lets you deploy NFT collections, configure mint groups, set payments, and more — all from your terminal.
+This CLI lets you deploy NFT collections, configure mint groups, set payments, upload metadata to arweave & walrus and more - all from your terminal.
 
-> ⚠️ **Note:** This project is currently in active development and only supports **Sui testnet**. Mainnet support will be added in a future release.
+For detailed documentation on how to use the CLI, refer to the [Joystiq documentation](https://joystiq.io/).
 
 ---
 
-## 🚀 Getting Started
+## Installion
+
+From your command line:
+```bash
+# Install joystiq globally
+$ npm install -g @we-bump/joystiq-nft-cli
+
+# Run the app
+$ joystiq
+```
+
+
+## Compile Source Code
 
 Clone the repo and install dependencies:
 
@@ -23,6 +35,3 @@ npm install
 ts-node index.ts
 ```
 
-## Documentation
-
-For detailed documentation on how to use the CLI, refer to the [Joystiq documentation](https://joystiq.io/).
