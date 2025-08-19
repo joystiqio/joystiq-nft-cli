@@ -171,7 +171,7 @@ export const GetGasBudget = async (client: SuiClient, tx: Transaction) => {
 const main = () => {
     program
         .name("joystiq")
-        .version("0.1.0")
+        .version("0.1.1")
         .description(`SUI NFT CLI`);
 
     const init = program.command("init").description("Initialization commands")

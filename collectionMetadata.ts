@@ -153,6 +153,7 @@ export const command_collection_metadata = async (parent: Command) => {
                         await verifyTransaction(rpc, res.digest)
                         completed += batch.length
                         spinner.text = `Setting metadata (${completed}/${toUpload.length})`
+                        spinner.render()
                     } else {
                         throw new Error(res.effects?.status.error)
                     }
@@ -164,6 +165,7 @@ export const command_collection_metadata = async (parent: Command) => {
                     })
                     fs.writeFileSync(logPath, JSON.stringify(allLogs, null, 4))
                     spinner.warn(`Failed batch: ${batch.map((b) => b.token_id).join(", ")}`)
+                    await setTimeout(() => {}, 250) // wait a bit before continuing
                     // continue to next batch
                 }
             }

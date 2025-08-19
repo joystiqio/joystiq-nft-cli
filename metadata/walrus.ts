@@ -16,14 +16,11 @@ export const command_metadata_walrus = async (parent: Command) => {
         .argument("<epoch>", "Storage epoch to use.")
         .option("-s --skip-confirm", "Skip confirmation for the upload.")
         .option("-t --tip <tip>", "Max relay tip in WAL", "1000")
-        .option("-u --url <url>", "Base (Aggregator) URL for the image (default is walrus.space depending on the network)")
         .option("-ur --upload-relay <url>", "Upload relay URL (default is walrus.space depending on the network)")
         .action(async (filePath: string, epoch: string, options: { skipConfirm: boolean, tip: string, url?: string, uploadRelay?: string }) => {
 
             let { rpc, client, keypair, wal, network } = getChainConfig(true)
 
-            const baseUrl = options.url ? options.url.replace(/\/$/, "")
-                : (network === "mainnet" ? "https://aggregator.walrus-mainnet.walrus.space" : "https://aggregator.walrus-testnet.walrus.space")
             const uploadRelayUrl = options.uploadRelay || (network === "mainnet" ? "https://upload-relay.walrus.space" : "https://upload-relay.testnet.walrus.space")
             let tip = parseInt(options.tip)
 
@@ -86,7 +83,7 @@ export const command_metadata_walrus = async (parent: Command) => {
 
             console.log("Blob ID:", blobId);
             console.log("Blob Object:", blobObject);
-            console.log("URL:", `${baseUrl}/v1/blobs/by-object-id/${blobObject.id.id}`)
+            console.log("URL:", `walrus://${blobId}`)
         })
 
     parent
@@ -97,7 +94,6 @@ export const command_metadata_walrus = async (parent: Command) => {
         .option("-s --skip-confirm", "Skip confirmation for the transaction cost", false)
         .option("-m --max-retries <maxRetries>", "Maximum number of retries for uploading images", "3")
         .option("-t --tip <tip>", "Max relay tip in WAL", "1000")
-        .option("-u --url <url>", "Base (Aggregator) URL for the images (default is walrus.space depending on the network)")
         .option("-ur --upload-relay <url>", "Upload relay URL (default is walrus.space depending on the network)")
         .action(async (projectPath: string, epoch: string, options) => {
             let { rpc, client, keypair, network, wal } = getChainConfig(true)
@@ -105,8 +101,6 @@ export const command_metadata_walrus = async (parent: Command) => {
             const maxRetries = parseInt(options.maxRetries)
             const tip = parseInt(options.tip)
             const epochNumber = parseInt(epoch);
-            const baseUrl = options.url ? options.url.replace(/\/$/, "")
-                : (network === "mainnet" ? "https://aggregator.walrus-mainnet.walrus.space" : "https://aggregator.walrus-testnet.walrus.space");
             const uploadRelayUrl = options.uploadRelay || (network === "mainnet" ? "https://upload-relay.walrus.space" : "https://upload-relay.testnet.walrus.space");
 
             if (fs.existsSync(`${projectPath}/metadata.json`)) {
@@ -435,7 +429,7 @@ export const command_metadata_walrus = async (parent: Command) => {
                 let metadata = {
                     token_id: file.token_id,
                     name: file.name,
-                    image_url: `${baseUrl}/v1/blobs/by-object-id/${cached.blobObject}`,
+                    image_url: `wal://${cached.blobId}`,
                     description: file.description || "",
                     attributes: attributes,
                 }
@@ -451,7 +445,7 @@ export const command_metadata_walrus = async (parent: Command) => {
             if (tokenIdMinusOne !== -1) {
                 const minusOne = cache.images.find((i: any) => parseInt(i.token_id) === -1)
                 if (minusOne) {
-                    console.log("Collection image (token id -1): " + chalk.green(`${baseUrl}/v1/blobs/by-object-id/${minusOne.blobObject}`))
+                    console.log("Collection image (token id -1): " + chalk.green(`wal://${minusOne.blobId}`))
                 }
             }
         })
