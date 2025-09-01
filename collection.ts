@@ -495,7 +495,6 @@ export const command_collection = async (parent: Command) => {
             let { rpc, keypair, client, joystiq } = getChainConfig(true)
 
             let artifacts = JSON.parse(fs.readFileSync(`${projectPath}/artifacts.json`).toString())
-            let config = JSON.parse(fs.readFileSync(`${projectPath}/config.json`).toString())
 
             let tx = new Transaction()
             tx.setSender(keypair.getPublicKey().toSuiAddress())
@@ -550,7 +549,6 @@ export const command_collection = async (parent: Command) => {
             let { rpc, keypair, client, joystiq } = getChainConfig(true)
 
             let artifacts = JSON.parse(fs.readFileSync(`${projectPath}/artifacts.json`).toString())
-            let config = JSON.parse(fs.readFileSync(`${projectPath}/config.json`).toString())
 
             let tx = new Transaction()
             tx.setSender(keypair.getPublicKey().toSuiAddress())
@@ -559,6 +557,7 @@ export const command_collection = async (parent: Command) => {
                 target: `${artifacts.packageID}::jq721::transfer_collection_ownership`,
                 typeArguments: [],
                 arguments: [
+                    tx.object(artifacts.collectionObjectID),
                     tx.object(artifacts.publisherID),
                     tx.object(artifacts.policyCapID),
                     tx.pure.address(newOwner)

@@ -8,13 +8,14 @@ import { command_collection } from "./collection";
 import axios from "axios";
 import { command_utils } from "./utils";
 import { command_metadata } from "./metadata";
+
 import { command_allowlist } from "./allowlist";
 import { Transaction } from "@mysten/sui/transactions"
 
-const JOYSTIQ_CORE_TESTNET = "0xf3470587bbf694ade7e2b30bc92d8cb988f871ec1034bfeaef35a0cf01d23d3f"
-const JOYSTIQ_CORE_TESTNET_ROOT = "0x0328d63fe460477e59e7499274c974d0719382884fcc2128ad1fbb3a7259f7e3"
-const JOYSTIQ_CORE_MAINNET = "0x7595ad0a79228628cf186c3ae70d0c94e78b8071a7dcaaab3e7104cd87b8af84"
-const JOYSTIQ_CORE_MAINNET_ROOT = "0x617b5bfab19d13a414c73f7ddaf711fa4d0bf39d6d252e8a56b62f447311c3d3"
+const JOYSTIQ_CORE_TESTNET = "0xb7821def705f461d76490d7fe87b71cb1feed4896df71a04e115e485a4e89bff"
+const JOYSTIQ_CORE_TESTNET_ROOT = "0xab7c93f04a96463af1cb257fecc50b9bf41bb0e2bcbafef250a3b8cf9d2b55d4"
+const JOYSTIQ_CORE_MAINNET = "0xeace579752cd466d91aa73a60829674829d3e329bde76625340528b3954b79ea"
+const JOYSTIQ_CORE_MAINNET_ROOT = "0x9e12a19292d42b4161778d4086d44489f1deb2c1b60813d0fc3f85b1150d22cf"
 const WAL_TESTNET = "0x8190b041122eb492bf63cb464476bd68c6b7e570a4079645a8b28732b6197a82::wal::WAL"
 const WAL_MAINNET = "0x356a26eb9e012a68958082340d4c4116e7f55615cf27affcff209cf0ae544f59::wal::WAL"
 
@@ -171,7 +172,7 @@ export const GetGasBudget = async (client: SuiClient, tx: Transaction) => {
 const main = () => {
     program
         .name("joystiq")
-        .version("0.1.1")
+        .version("0.1.3")
         .description(`SUI NFT CLI`);
 
     const init = program.command("init").description("Initialization commands")
